@@ -1,0 +1,527 @@
+---
+title: "Wine Reviews, by Eric Rudenja"
+output:
+  pdf_document: default
+  html_document: default
+---
+##### 184926IVSB, Cyber Security Engineering, 2020, TalTech
+##### Compiled using the Kaggle dataset https://www.kaggle.com/zynicide/wine-reviews
+
+***
+##### Assignment 1.
+
+ The project was compiled using the Kaggle dataset https://www.kaggle.com/zynicide/wine-reviews. It is a dataset of roughly 130000 wines, whose variables...
+ 
+ * price of the bottle of the wine ($USD) 
+ * number of points rated as on a scale of 0-100
+ * description
+ * vineyard within the winery
+ * country of production
+ * province
+ * wine growing area in a province
+ * specific regions within a wine growing area
+ * tester name
+ 
+ ...were scraped from a popular wine tasting website https://www.winemag.com during the week of June 15th, 2017 and then again on the week of November 22nd, 2017.
+ 
+Though most of these variables (please refer to the table below) are qualitative and provide little value to this particular project, the two of the numerical values are of high value to us. In its current form, the title of the wine is not of any value to us, however further below a numerical value will be extracted out of the string. 
+
+ 
+ Numerical                                              | Qualitative
+------------------------------------------------------- | -------------
+ Price of the bottle of the wine ($USD)                 | description
+ Number of points rated as on a scale of 0-100          | vineyard
+ Title (currently qualitative)                          | country of production
+ -                                                      | province
+ -                                                      | wine growing area in a province
+ -                                                      | specific regions within a wine growing area
+ -                                                      | tester name
+              
+```{r}
+#Import the dataset, also change all blank fields to NA for further filtering
+test <- read.csv(file = './archive/winemag-data-130k-v2.csv', na.strings = c("", "NA"))
+
+#Find the columns with the most 'NA' values
+sapply(test, function(y) round((sum(length(which(is.na(y))))/nrow(test))*100.00,2))
+
+#Re-import our dataset, this time omitting the unnecessary columns                      
+wineDataset <- read.csv(file = './archive/winemag-data-130k-v2.csv', na.strings = c("", "NA"))[ ,c('X', 'title', 'country', 'price', 'points')]
+
+#Re-import our dataset once again, this time removing any row that has at least one NA value, as these will be of little value to us and might impede our research further down the road.
+wineDataset <- wineDataset[rowSums(is.na(wineDataset)) == 0,]
+
+
+```
+
+```{r}
+barplot(sapply(test, function(y) round((sum(length(which(is.na(y))))/nrow(test))*100.00,2)), main="NA values in the dataset", las=2, cex.names=.5, ylab = "percentage missing", col=c("#89C5DA", "#DA5724", "#74D944", "#CE50CA", "#3F4921", "#C0717C", "#CBD588", "#5F7FC7", 
+"#673770", "#D3D93E", "#38333E", "#508578", "#D7C1B1", "#689030"))
+```
+
+The above output proves to us that many of the fields are unfitting to our demands not only because they are qualitative, but also because many of the columns have too many null fields.
+
+A title of the wine is a string containing its name and year it was produced. An important value that we could extract out of the title of the wine is the year, though in this case we do not care much about the title. A library called stringr will be used to splice the string using REGEX and extract just the date out of the title. So, for instance, if the title of the wine is "R2 2013 Camp 4 Vineyard Grenache Blanc (Santa Ynez Valley)", the only value that is of interest is 2013.
+
+Due to the significantly large amount of rows in our dataset and no absolute uniform format of filtering meaningful numbers out of the title column, for the sake of removing the utmost fringe examples of wines and removing outliers when creating distribution graphs and until the end of the project I have chosen to create the following boundaries: prices of wine will be limited by $200, points are in the range of 80-100 to begin with and therefore any outliers will be removed and the year of the wine will be limited from 1980 to 2017.
+
+Let us create a distribution graph based on the prices of the wines. 
+
+```{r}
+library(stringr)
+
+wineDataset$title <- stringr::str_extract(wineDataset$title, "\\d{4}")
+
+#Limit the output of dataset to 10 rows for now.
+head(wineDataset, 10)
+
+#Of course, the datatype now needs to be converted from type chr to type int.
+wineDataset$title <- as.integer(wineDataset$title)
+
+#Finally, column title is renamed to be representative of the year
+names(wineDataset)[names(wineDataset)=="title"] <- "year"
+
+#Re-import our dataset once again, this time removing any row that has at least one NA value, as these will be of little value to us and might impede our research further down the road.
+wineDataset <- wineDataset[rowSums(is.na(wineDataset)) == 0,]
+
+#Remove outliers
+
+wineDataset <- subset(wineDataset, 1980 < year)
+wineDataset <- subset(wineDataset, year < 2020)
+wineDataset <- subset(wineDataset, price <= 200)
+summary(wineDataset$price)
+```
+
+```{r}
+priceOfWine<-wineDataset$price
+
+hist(priceOfWine, main = "Price for a bottle", breaks=100, col="coral1", xlim=c(0,100))
+
+```
+
+Let us also create a distribution graph based on the points awarded to the wines. This histogram clearly shows us that the WineMag only chooses to review wines that are palatable to them, as the least amount of points to have ever been awarded to a bottle is 80. We can also deduce the fact that most wines are awarded a score of somewhere in between 85 and 90 points.
+
+```{r}
+pointsOfWine<-wineDataset$points
+
+hist(pointsOfWine, main = "Points awarded to a bottle", col="darkmagenta")
+```
+
+
+Finally, a graph of the years that the wines are produced can be provide useful insights into the dataset too.
+
+```{r}
+yearOfWine<-wineDataset$year
+summary(yearOfWine)
+hist(yearOfWine, main = "Year of the wine", breaks=40, col="pink", xlim=c(1980,2020))
+summary(yearOfWine)
+
+```
+
+
+
+
+
+
+
+##### Assignment 2.
+
+First of all, I will create a mode function since there is not one present in the default R library. Then, since the built-in function range() returns both maximum and minimum value and we need the difference (i.e. maximum subtract minimum), a new function rangeMinus must be declared manually. There is also no built-in function for calculating the trimean value and geometric mean, so I have written my own. Unfortunately, the most commonly used formula that I have re-written in R, the product of all values put to the 1/n power, returns an infinite value due to R limitations of computations. Therefore, I have found and used another less commonly used formula that I have not encountered before, which utilises the exponential number of the value. I have also created boxplots for all of the above values, which helps us visualise the variables and easier assess them.
+
+From the computations performed, I can conclude that:
+
+ * The mean of price is $33.4. At 25, the median of the price is quite different from the mean in this case, and provides a further more accurate insight into the price dataset as there is a significantly skewed distribution. The most common price tag of the wine is 20.
+ * The mean of points is 88.42. With our points dataset, there aren't many possible outliers that could skew our distribution, and this is further proven by the fact that at 88, the median of points is strikingly similar to the mean. Again, the most commonly present rating is 88, as is indicated by the mode function.
+ * When rounded, the mean year of production is 2011. Again, after filtering our dataset during the previous assignment there aren't many possible outliers left that could skew our distribution, the median is 2011. The mode of year is 2013, meaning that the wines in our dataset are even slightly younger than our mean and median values have shown us.
+ * From the rangeMinus function declated it can be concluded that our dataset is wide-reaching enough to touch upon wines in every category of price, points and year ($196, 20 points and 35 years respectively).
+ * At 25, the interquantile range of price helps us indentify outliers and makes me consider further filtering the maximum value of price column in our dataset. I have decided to leave it as it is for further analysis in the upcoming assignments. The IQR of both price and year columns (5 points and 4 years) further proves that there is no further filtering required as there have already been some strict outlier control for these two values.
+ * Variance, meaning how close the scores in the distribution are to the middle of the distribution, and the standard deviation, the square root of the variance, shows as there is high divergence of data from their mean values in the wineDataset.
+ * Price of wine and year of wine have many potential outliers as it is especially clearly seen from the boxplots.
+ * Trimean values are values which are less sensitive to outliers in the dataset. The trimean and median of the year value turns out to be exactly the same. The trimean of price is $2.25 higher than its meadian, the trimean of points is just 0.25 points higher than the median.
+ * The geometric mean of points is 88.42042 which is precisely the same as its mean. The geometric mean of the year differs from the mean by +0.003. The difference can be observed with the geometric mean of the price, which at 27.19703 is 6.21394 smaller than the mean of 33.41097. The reason why geometric mean is different only with the price value can be explained by the fact that numbers in the price column tend to make large fluctuations unlike the year and points column.
+ * Trimmed mean, which removes outliers from each end of the dataset before calculating the mean, remain extremely stable for the points and year columns when tested with a trimming values ranging from 5% up until 30%. Only the price column turned out to be susceptible to trimming from 5% to 30%, with the mean price dropping in a stable fashion from $30.55 down to 26.59.
+ 
+
+```{r}
+
+par(mfrow=c(2,2))
+
+boxplot(priceOfWine, main="Boxplot of priceOfWine", col = c("coral1"), outcol = "blue", ylab = "price")
+
+boxplot(pointsOfWine, main="Boxplot of pointsOfWine", col = c("darkmagenta"), outcol = "blue", ylab = "points")
+
+boxplot(yearOfWine, main="Boxplot of yearOfWine", col = c("pink"), outcol = "blue", ylab = "year")
+
+```
+
+
+
+
+
+```{r}
+# Create mode function
+mode <- function(v) {
+   uniqv <- unique(v)
+   uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
+# Overview of the Price
+meanOfPrice <- mean(priceOfWine)
+medianOfPrice <- median(sort(priceOfWine))
+modeOfPrice <- mode(priceOfWine)
+
+# Let us then do an overview of the Points
+meanOfPoints <- mean(pointsOfWine)
+medianOfPoints <- median(pointsOfWine)
+modeOfPoints <- mode(pointsOfWine)
+
+# Overview of the Year
+meanOfYear <- mean(yearOfWine)
+medianOfYear <- median(yearOfWine)
+modeOfYear <- mode(yearOfWine)
+
+
+# Further, variability measures of our variables must be computed. First, compute range of Price and Points. 
+# Since the built-in function range() returns both maximum and minimum value and we need the difference (i.e. maximum minus minimum), a new function must be declared
+rangeMinus <- function(v) {
+  rangeResult <- (max(v) - min(v))
+}
+
+rangeOfPrice <- rangeMinus(priceOfWine)
+rangeOfPoints <- rangeMinus(pointsOfWine)
+rangeOfYear <- rangeMinus(yearOfWine)
+
+# Interquartile range, meaning range of the middle 50% of the scores in a distribution
+
+iqrPrice <- IQR(priceOfWine)
+iqrPoints <- IQR(pointsOfWine)
+iqrYear <- IQR(yearOfWine)
+
+# Variance, meaning how close the scores in the distribution are to the middle of the distribution
+varPrice <- var(priceOfWine)
+varPoints <- var(pointsOfWine)
+varYear <- var(yearOfWine)
+
+# Standard deviation, square root of the variance
+sdPrice <- sd(priceOfWine)
+sdPoints <- sd(pointsOfWine)
+sdYear <- sd(yearOfWine)
+
+
+#Trimean 
+
+trimean <- function(v) {
+  trimeanResult <- (quantile(v)[2] + (2*quantile(v)[3]) + quantile(v)[4]) / 4
+}
+quantile(pointsOfWine)
+trimeanPrice <- trimean(priceOfWine)
+trimeanPoints <- trimean(pointsOfWine)
+trimeanYear <- trimean(yearOfWine)
+
+
+#Geometric mean through a less commonly used formula
+geomMean <- function(v){
+  
+  exp( mean ( log(v) ) )
+  
+}
+geomMeanPrice <- geomMean(priceOfWine)
+geomMeanPoints <- geomMean(pointsOfWine)
+geomMeanYear <- geomMean(yearOfWine)
+
+trimmed <- mean(priceOfWine, trim=0.05)
+trimmed <- mean(priceOfWine, trim=0.10)
+trimmed <- mean(priceOfWine, trim=0.15)
+trimmed <- mean(priceOfWine, trim=0.20)
+trimmed <- mean(priceOfWine, trim=0.25)
+trimmed <- mean(priceOfWine, trim=0.30)
+
+trimmed <- mean(pointsOfWine, trim=0.05)
+trimmed <- mean(pointsOfWine, trim=0.10)
+trimmed <- mean(pointsOfWine, trim=0.15)
+trimmed <- mean(pointsOfWine, trim=0.20)
+trimmed <- mean(pointsOfWine, trim=0.25)
+trimmed <- mean(pointsOfWine, trim=0.30)
+
+trimmed <- mean(yearOfWine, trim=0.05)
+trimmed <- mean(yearOfWine, trim=0.10)
+trimmed <- mean(yearOfWine, trim=0.15)
+trimmed <- mean(yearOfWine, trim=0.20)
+trimmed <- mean(yearOfWine, trim=0.25)
+trimmed <- mean(yearOfWine, trim=0.30)
+
+```
+
+
+##### Assignment 3
+
+A correlation matrix can be computed and expressed visually. Since in this case we can't filter columns to only include numeric type (there are other columns that are numeric besides the one needed), columns will be chosen manually. 
+
+As seen on the heatmap below, there is a very meaningful correlation of price and points awarded. The price of wine is the independent variable in our case, points awarded to the wine is the dependent variable. I believe that if the website chose to include the wines that they reviewed unfavorably, the correlation between price and points would have been higher as well. The correlation matrix and the heatmap quite surprisingly show us that the year when the wine was produced does not affect the price or the points significantly, which is surprising since many sommeliers often consider some years to be better than others. 
+
+To summarize:
+
+ * There is a high correlation between points and price (equal to 0.54), meaning that the pricier the wine gets, the more points it gets awarded.
+ * There is a slight negative correlation between price and year, meaning that as the year of produce approaches 'vintage' and becomes more mature, the more it is valued monetarily on the market to an extent.
+ * There is a slight correlation between year and points, meaning that as the wine has aged, the more well-assessed it becomes by the sommelier.
+ * The heatmap is supported by the scatter plots. We can further assess that after a price tag of about 80 dollars, the wine does not increase in perceived quality as rapidly as it does in the range of 4 dollars to 50 dollars. 
+ * Scatter plots suggest that after year 2012, the younger the wine is, the lower its price becomes on the market. Surprisingly, there is only a very small increase in price as it approaches being mature.
+ * Scatter plots suggest that there is a slight gradual increase of points awarded to a wine up until 2010, with a very sudden, albeit slight, spike of wines being rated higher by 1 point than they would've been expected to be rated as. After about three years, the rating system stabilised to the gradual increase rate that was seen before this spike.
+ 
+
+```{r}
+library(ggcorrplot)
+
+cor <- cor(wineDataset[c(2, 4, 5)])
+cor <- round(cor, 2)
+
+head(yearOfWine, 5)
+head(priceOfWine, 5)
+head(pointsOfWine, 5)
+
+#Visually express the correlation matrix
+ggcorrplot(cor,outline.col = "white",  hc.order = TRUE,type = "full",lab = TRUE, ggtheme = ggplot2::theme_gray,
+   colors = c("#6D9EC1", "white", "#E46726"))
+```
+
+
+A scatter plot of the dependent variable vs the independent variable would look like the following:
+
+```{r}
+scatter.smooth(x=priceOfWine, y=pointsOfWine, col='#03a9f4', pch=16, cex=0.6, xlim=c(0,200), main="Scatter")
+abline(lm(pointsOfWine ~ priceOfWine), col = "red")
+
+```
+
+Let us also draw two more scatter plots: price of wine vs the year that the wine was produced and points of wine vs the year:
+
+```{r}
+#DELETE?
+par(mfrow=c(1,2))
+scatter.smooth(y=priceOfWine, x=yearOfWine, col='#03a9f4', pch=16, cex=0.6, xlim=c(1995, 2020), ylim=c(0, 200), main="Scatter")
+abline(lm(priceOfWine ~ yearOfWine), col = "red")
+scatter.smooth(y=pointsOfWine, x=yearOfWine, col='#03a9f4', pch=16, cex=0.6, xlim=c(1995, 2020), ylim=c(80, 100), main="Scatter")
+abline(lm(pointsOfWine ~ yearOfWine), col = "red")
+```
+
+
+
+
+
+
+##### Step 4.
+##### Eurojackpot
+
+Eurojackpot is a European lottery with 18 participating countries. Participating costs €2 a ticket. The minimum jackpot starts at €10,000,000 and can sometimes go up to €90,000,000. The winning numbers are drawn once a week on Fridays.
+
+The rules are quite simple: a participant chooses five primary non-repeating numbers from a range of 1 to 50; then chooses an additional two non-repeating numbers from a range of 1 to 10. The winning numbers are drawn once a week on Fridays. There are 12 potential winning situations and the prize sum depends on the amount of primary and additional numbers matched. The order in which the numbers are chosen by the participant and drawn by the lottery is not important.
+
+ Prize position, descending by sum                      | A winning combination
+------------------------------------------------------- | -------------
+1 (largest, jackpot)                                    | 5 primary + 2 additional
+2                                                       | 5 primary + 1 additional
+3                                                       | 5 primary
+4                                                       | 4 primary + 2 additional
+5                                                       | 4 primary + 1 additional
+6                                                       | 4 primary
+7                                                       | 3 primary + 2 additional
+8                                                       | 2 primary + 2 additional
+9                                                       | 3 primary + 1 additional
+10                                                      | 3 primary
+11                                                      | 1 primary + 2 additional
+12                                                      | 2 primary + 1 additional
+
+I have chosen to write my own function for any of the necessary calculations instead of relying on external libraries e.g. for combinations.
+
+First, I define a function that performs the computation of a C(n, k) formula. Next, the lottery function is created with the task of calculating the primary number odds, additional number odds and the final total odds.
+There are C(5, k) odds of selecting k winning numbers, where 5 is the number of positions we draw according to the rules and k is the amount that will actually win. This combination must be multiplied by a combination C(50-5, 5-n) of chosen losing numbers from a pool of losing numbers. This product must be then divided by the total amount of combinations possible.
+The final formula for the primary numbers will be (C(5, k) * C(50-5, 5-n)) / C(50, 5)
+The same process (C(2, k) * C(10-2, 2-n)) / C(10, 2) will be performed by the other part of the lottery function to calculate the odds of choosing the winning additional numbers. 
+
+To avoid redundant code, I will create an array that will store the rules and calculate all the possibilities of the game. This will also be handy if the rules of the game change.
+
+```{r}
+combination = function(n, k) {
+  factorial(n) / ((factorial(k) * factorial((n - k))))
+}
+
+arrayOfPrimaryWinners <- list(5, 5, 5, 4, 4, 4, 3, 2, 3, 3, 1, 2)
+arrayOfAdditionalWinners <- list(2, 1, 0, 2, 1, 0, 2, 2, 1, 0, 2, 1)
+
+
+lottery = function(amountOfNumbersToWinPrimary, amountOfNumbersToWinAdditional) {
+  topLeftPrimary <- combination(5, amountOfNumbersToWinPrimary)
+  topRightPrimary <- combination(50 - 5, 5 - amountOfNumbersToWinPrimary)
+  bottomPrimary <- combination(50, 5)
+  
+  primaryOdds <- 1 / ((topLeftPrimary * topRightPrimary) / bottomPrimary)
+
+  topLeftAdditional <- combination(2, amountOfNumbersToWinAdditional)
+  topRightAdditional <- combination(10 - 2, 2 - amountOfNumbersToWinAdditional)
+  bottomAdditional <- combination(10, 2)
+  
+  additionalOdds <- 1 / ((topLeftAdditional * topRightAdditional) / bottomAdditional)
+  
+  finalOdds <- primaryOdds * additionalOdds
+  
+  str_c(
+  "The probability of winning the ", amountOfNumbersToWinPrimary, " + ", amountOfNumbersToWinAdditional, " game is: 1 to ", round(finalOdds))
+  
+}
+
+i = 1
+while (i <= length(arrayOfPrimaryWinners)) {
+  print(lottery(arrayOfPrimaryWinners[[i]], arrayOfAdditionalWinners[[i]]))
+  i = i + 1
+}
+
+```
+
+According to the output above, it seems to make very little sense to actually expect to win any meaningful prize in a lottery over a lifetime. It might take one person 95344200 weekly games * 52.1429 weeks in a year approximately 1828518 years to win. Considering the largest prize in Eurojackpot history was €1 155 687 and at €2 a ticket, if one had bought as many as 95344200 tickets you would lose an average of €165 per ticket for a realistic chance of winning the 5 + 2 game.
+
+
+
+##### Assignment 5.
+##### 
+
+The wineDataset is split into a training and testing set in proportions of 70/30. The training set consists of 81160 entries. I used three models: linear, SVM (Support Vector Machines) and RBF (Radial Basis Function). I have noticed that on such a large dataset SVM took considerably longer than the other two. The training set is then compared against the test set.
+MAPE value is 2.877734, SVM value is 0.0216.
+Considering the fact that there isn't any one exceptionally high correlation in between any of the values, I would say that the model has performed quite well. Quite surprisingly, even the Price-Year and Points-Year pairs have performed fairly well, though the correlation matrix made me think that it would not have. It should be noted that visually the SVM model performed adequately throughout the scatterplot for the Points-Year pair, though due to a small sample size of vintage wines it is quite difficult to actually assess its performance on the beginning side of the scatterplot.
+
+```{r}
+knitr::opts_chunk$set(cache = TRUE)
+
+library(MLmetrics)
+library(e1071)
+library(RSNNS)
+
+## 70%
+sampleSize <- floor(0.70 * nrow(wineDataset))
+
+## set the seed
+set.seed(123)
+train <- sample(seq_len(nrow(wineDataset)), size = sampleSize)
+
+wineDatasetTrain <- wineDataset[train, ]
+wineDatasetTest <- wineDataset[-train, ]
+
+
+linearModelYearPrice <- lm(wineDatasetTrain$price ~ wineDatasetTrain$year, data=wineDatasetTrain)   
+linearModelYearPoints <- lm(wineDatasetTrain$points ~ wineDatasetTrain$year, data=wineDatasetTrain)  
+linearModelPricePoints <- lm(wineDatasetTrain$points ~ wineDatasetTrain$price, data=wineDatasetTrain)   
+
+
+#EPRICE POINTS
+
+prediction.linear <- predict (linearModelPricePoints, wineDatasetTrain)
+
+prediction.MAPE <- MAPE(prediction.linear,wineDatasetTrain$price)
+paste0("linear model: ",
+       MAPE(prediction.linear,wineDatasetTrain$price))
+
+prediction.RMSE.linear <- RMSE(prediction.linear,wineDatasetTrain$price)
+paste0("RMSE model: ",
+       RMSE(prediction.linear,wineDatasetTrain$price))
+
+prediction.MAE.linear <- MAE(prediction.linear,wineDatasetTrain$price)
+paste0("MAE model: ",
+       MAE(prediction.linear,wineDatasetTrain$price))
+
+svm.model <- svm(wineDatasetTrain$points ~ wineDatasetTrain$price, data = wineDatasetTrain)
+prediction.svm <- predict(svm.model, wineDatasetTrain$price)
+paste0("svm model: ",
+       MAPE(prediction.svm,wineDatasetTrain$points))
+
+
+plot( wineDatasetTest$price, wineDatasetTest$points, xlab = "Price", ylab = "Points", col= "#75704E", main="Price-Points Training", pch=16, cex=0.6)
+points (wineDatasetTrain$price,
+        prediction.linear,
+        col = "#89C5DA",
+        pch = 20)
+points(wineDatasetTrain$price,
+       prediction.svm,
+       col = "#DA5724",
+       pch = 20)
+legend(x="bottomright", 
+        legend=c("prediction.linear","prediction.svm"),
+        col=c("#89C5DA","#DA5724"), lwd=1, lty=c(0,0), 
+        pch=c(15,15))
+
+
+
+rbf.model <- rbf(wineDatasetTrain$price, wineDatasetTrain$points, data = wineDatasetTrain)
+
+
+plot(wineDatasetTest$price, wineDatasetTest$points, main="Price-Points Training RBF", xlab = "Price", ylab = "Points", col= "#75704E", pch=16, cex=0.6)
+lines(wineDatasetTrain$price, fitted(rbf.model), col="#89C5DA")
+
+
+
+#YEAR PRICE 
+prediction.linear.yearPrice <- predict (linearModelYearPrice, wineDatasetTrain)
+
+svm.model.yearPrice <- svm(wineDatasetTrain$price ~ wineDatasetTrain$year, data = wineDatasetTrain)
+prediction.svm.yearPrice <- predict(svm.model.yearPrice, wineDatasetTrain$year)
+paste0("svm model: ",
+       MAPE(prediction.svm,wineDatasetTrain$price))
+
+plot( wineDatasetTest$year, wineDatasetTest$price, xlab = "Year", ylab = "Price", main="Price-Year Training", col= "#75704E", pch=16, cex=0.6)
+points (wineDatasetTrain$year,
+        prediction.linear.yearPrice,
+        col = "#89C5DA",
+        pch = 20)
+points(wineDatasetTrain$year,
+       prediction.svm.yearPrice,
+       col = "#DA5724",
+       pch = 20)
+legend(x="bottomleft", 
+        legend=c("prediction.linear","prediction.svm"),
+        col=c("#89C5DA","#DA5724"), lwd=1, lty=c(0,0), 
+        pch=c(15,15))
+
+
+rbf.model.yearPrice <- rbf(wineDatasetTrain$year, wineDatasetTrain$price, data = wineDatasetTrain)
+
+plot(wineDatasetTest$year, wineDatasetTest$price, col= "#75704E", main="Price-Year Training RBF", xlab = "Year", ylab = "Price", pch=16, cex=0.6)
+lines(wineDatasetTrain$year, fitted(rbf.model.yearPrice), col="#89C5DA")
+
+#YEAR POINTS
+
+prediction.linear.yearPoints <- predict (linearModelYearPoints, wineDatasetTrain)
+
+svm.model.yearPoints <- svm(wineDatasetTrain$points ~ wineDatasetTrain$year, data = wineDatasetTrain) #or points year???
+prediction.svm.yearPoints <- predict(svm.model.yearPoints, wineDatasetTrain$year) #or points??
+paste0("svm model: ",
+       MAPE(prediction.svm,wineDatasetTrain$points))
+
+plot( wineDatasetTest$year, wineDatasetTest$points, xlab = "Year", ylab = "Price", main="Points-Year Training", col= "#75704E", pch=16, cex=0.6)
+points (wineDatasetTrain$year,
+        prediction.linear.yearPoints,
+        col = "#89C5DA",
+        pch = 20)
+points(wineDatasetTrain$year,
+       prediction.svm.yearPoints,
+       col = "#DA5724",
+       pch = 20)
+legend(x="bottomleft", 
+        legend=c("prediction.linear","prediction.svm"),
+        col=c("#89C5DA","#DA5724"), lwd=1, lty=c(0,0), 
+        pch=c(15,15))
+
+rbf.model.yearPoints<- rbf(wineDatasetTrain$year, wineDatasetTrain$points, data = wineDatasetTrain)
+
+plot(wineDatasetTest$year, wineDatasetTest$points, main="Points-Year Training RBF", xlab = "Year", ylab = "Price", col= "#75704E", pch=16, cex=0.6)
+lines(wineDatasetTrain$year, fitted(rbf.model.yearPoints), col="#89C5DA")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
